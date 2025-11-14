@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -6,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:pinput/pinput.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:wolt_modal_sheet/wolt_modal_sheet.dart';
@@ -15,6 +15,7 @@ import '../core/provider/theme_provider.dart';
 import '../core/username/username.dart';
 import '../services/nearby_services.dart';
 import '../widgets/file_picker.dart';
+import '../widgets/qrcode/mobileqrcode.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -52,11 +53,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
 
     final isWeb = kIsWeb;
-    final isMobile = !kIsWeb && (Platform.isIOS || Platform.isAndroid);
+    final isMobile =
+        !isWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
     final screenWidth = MediaQuery.of(context).size.width;
     final useMobileLayout = isMobile || (isWeb && screenWidth < 600);
 
-    
     return Scaffold(
       body: SizedBox(
         width: double.infinity,
@@ -132,7 +135,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           : Row(
                               spacing: isMobile ? 4.sp : 8,
                               children: [
-                                IconButton( 
+                                IconButton(
                                   onPressed: () {
                                     setState(() {
                                       inPairedDevice = !inPairedDevice;
@@ -161,7 +164,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                       pageListBuilder: (context) {
                                         return [
                                           _buildPublicRoomQrCodePage(
-                                              context, isDarkMode),
+                                            context,
+                                            isDarkMode,
+                                          ),
                                         ];
                                       },
                                     );
@@ -184,7 +189,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ? Colors.white
                                         : Colors.black,
                                   ),
-                                  onHover: (value) {},
                                 ),
                                 IconButton(
                                   onPressed: () {
@@ -259,9 +263,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             Padding(
                               padding: EdgeInsets.all(isMobile ? 5.sp : 5),
                               child: Container(
-                                // margin: EdgeInsets.symmetric(
-                                //   horizontal: isMobile ? 12.sp : 0,
-                                // ),
                                 width: isMobile ? double.infinity : 500,
                                 height: isMobile ? 50.sp : 60,
                                 decoration: BoxDecoration(
@@ -306,12 +307,26 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ],
                                     ),
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       spacing: isMobile ? 5.sp : 8,
                                       children: [
-                                         connectionType(isMobile, 'on this network'),
-                                        inPublicRoom ? connectionType(isMobile, 'public room') : SizedBox.shrink(),
-                                        inPairedDevice ? connectionType(isMobile, 'paired device') : SizedBox.shrink(),
+                                        connectionType(
+                                          isMobile,
+                                          'on this network',
+                                        ),
+                                        inPublicRoom
+                                            ? connectionType(
+                                                isMobile,
+                                                'public room',
+                                              )
+                                            : SizedBox.shrink(),
+                                        inPairedDevice
+                                            ? connectionType(
+                                                isMobile,
+                                                'paired device',
+                                              )
+                                            : SizedBox.shrink(),
                                       ],
                                     ),
                                   ],
@@ -393,61 +408,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       inPairedDevice = !inPairedDevice;
                     });
                     final pin = (1000 + Random().nextInt(9000)).toString();
-                    showDialog(
-                      context: context,
-                      builder: (context) {
-                        final isDarkMode =
-                            Provider.of<ThemeProvider>(context, listen: false)
-                                    .themeMode ==
-                                ThemeMode.dark;
-                        final tileColor =
-                            isDarkMode ? Colors.white : Colors.black;
-
-                        return AlertDialog(
-                          backgroundColor: isDarkMode
-                              ? const Color(0xFF1F2937)
-                              : const Color(0xFFF9FAFB),
-                          title: Text('Scan QR Code',
-                              style: TextStyle(color: tileColor)),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox(
-                                width: 200,
-                                height: 200,
-                                child: QrImageView(
-                                  data: pin,
-                                  version: QrVersions.auto,
-                                  size: 200.0,
-                                  backgroundColor: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              Text(
-                                'Your PIN is:',
-                                style: TextStyle(color: tileColor, fontSize: 18),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                pin,
-                                style: TextStyle(
-                                  color: tileColor,
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 8,
-                                ),
-                              ),
-                            ],
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(),
-                              child: const Text('Close'),
-                            ),
-                          ],
-                        );
-                      },
-                    );
+                    buildMobileQrCodeDialog(context, pin);
                   },
                 ),
                 SpeedDialChild(
@@ -458,63 +419,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     setState(() {
                       inPublicRoom = !inPublicRoom;
                     });
-                    final pin =
-                        (100000 + Random().nextInt(900000)).toString();
-                    showDialog(
-                      context: context,
-                      builder: (context) {
-                        final isDarkMode =
-                            Provider.of<ThemeProvider>(context, listen: false)
-                                    .themeMode ==
-                                ThemeMode.dark;
-                        final tileColor =
-                            isDarkMode ? Colors.white : Colors.black;
-
-                        return AlertDialog(
-                          backgroundColor: isDarkMode
-                              ? const Color(0xFF1F2937)
-                              : const Color(0xFFF9FAFB),
-                          title: Text('Public Room Code',
-                              style: TextStyle(color: tileColor)),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox(
-                                width: 200,
-                                height: 200,
-                                child: QrImageView(
-                                  data: pin,
-                                  version: QrVersions.auto,
-                                  size: 200.0,
-                                  backgroundColor: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              Text(
-                                'Your PIN is:',
-                                style: TextStyle(color: tileColor, fontSize: 18),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                pin,
-                                style: TextStyle(
-                                  color: tileColor,
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 8,
-                                ),
-                              ),
-                            ],
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(),
-                              child: const Text('Close'),
-                            ),
-                          ],
-                        );
-                      },
-                    );
+                    final pin = (100000 + Random().nextInt(900000)).toString();
+                    buildMobilePublicRoomQrCodeDialog(context, pin);
                   },
                 ),
                 SpeedDialChild(
@@ -528,14 +434,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         backgroundColor: isDarkMode
                             ? const Color(0xFF1F2937)
                             : const Color(0xFFF9FAFB),
-                        title: Text('About ZappShare',
-                            style: TextStyle(
-                                color:
-                                    isDarkMode ? Colors.white : Colors.black)),
-                        content: Text('ZappShare v1.0.0',
-                            style: TextStyle(
-                                color:
-                                    isDarkMode ? Colors.white : Colors.black)),
+                        title: Text(
+                          'About ZappShare',
+                          style: TextStyle(
+                            color: isDarkMode ? Colors.white : Colors.black,
+                          ),
+                        ),
+                        content: Text(
+                          'ZappShare v1.0.0',
+                          style: TextStyle(
+                            color: isDarkMode ? Colors.white : Colors.black,
+                          ),
+                        ),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.of(context).pop(),
@@ -563,6 +473,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return Colors.grey;
     }
   }
+
   String connectionTypeText(String connectionType) {
     if (connectionType == 'on this network') {
       return 'On this network';
@@ -620,50 +531,41 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  WoltModalSheetPage _buildPairedDevicesSheet(
-      BuildContext context, bool isDarkMode) {
-    final tileColor = isDarkMode ? Colors.white : Colors.black;
-    return WoltModalSheetPage(
-      hasSabGradient: false,
-      topBarTitle: Text('Paired Devices', style: TextStyle(color: tileColor)),
-      backgroundColor:
-          isDarkMode ? const Color(0xFF1F2937) : const Color(0xFFF9FAFB),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ListTile(
-          leading: Icon(Iconsax.user, color: tileColor),
-          title: Text('Test Device', style: TextStyle(color: tileColor)),
-          onTap: () {
-            WoltModalSheet.of(context).showNext();
-          },
-        ),
-      ),
-    );
-  }
-
   WoltModalSheetPage _buildQrCodePage(BuildContext context, bool isDarkMode) {
     final tileColor = isDarkMode ? Colors.white : Colors.black;
     final pin = (1000 + Random().nextInt(9000)).toString();
     return WoltModalSheetPage(
       hasSabGradient: false,
-      topBarTitle: Text('Scan QR Code', style: TextStyle(color: tileColor)),
-      backgroundColor:
-          isDarkMode ? const Color(0xFF1F2937) : const Color(0xFFF9FAFB),
+      isTopBarLayerAlwaysVisible: true,
+      hasTopBarLayer: true,
+      topBar: Container(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+        color: connectionColor('paired device').withValues(alpha: 0.2),
+        child: Text(
+          'Pair with a device',
+          style: TextStyle(
+            color: connectionColor('paired device').withValues(alpha: 0.8),
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ),
+      backgroundColor: isDarkMode
+          ? const Color(0xFF1F2937)
+          : const Color(0xFFF9FAFB),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            const SizedBox(height: 10),
             QrImageView(
               data: pin,
               version: QrVersions.auto,
               size: 200.0,
               backgroundColor: Colors.white,
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Your PIN is:',
-              style: TextStyle(color: tileColor, fontSize: 18),
             ),
             const SizedBox(height: 10),
             Text(
@@ -675,67 +577,282 @@ class _HomeScreenState extends State<HomeScreen> {
                 letterSpacing: 8,
               ),
             ),
+            const SizedBox(height: 10),
+            Text(
+              'Share this pin or QR code to let others\npair with your device',
+              style: TextStyle(
+                color: tileColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            Divider(color: tileColor, thickness: 1),
+            const SizedBox(height: 10),
+            Text(
+              'OR',
+              style: TextStyle(
+                color: tileColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            Pinput(
+              length: 4,
+              defaultPinTheme: PinTheme(
+                width: 60,
+                height: 60,
+                textStyle: TextStyle(
+                  fontSize: 20,
+                  color: tileColor,
+                  fontWeight: FontWeight.w600,
+                ),
+                decoration: BoxDecoration(
+                  border: Border.all(color: tileColor.withValues(alpha: 0.5)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              separatorBuilder: (index) => const SizedBox(width: 15),
+              onCompleted: (value) {
+                debugPrint(value);
+              },
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter a valid pin';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Enter pin from another device to pair',
+              style: TextStyle(
+                color: tileColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        backgroundColor: connectionColor('paired device'),
+                      ),
+                      onPressed: () {
+                        debugPrint('Pair with device');
+                        // TODO: Implement pairing logic
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.all(10),
+                        child: Text(
+                          'Pair with device',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        backgroundColor: Colors.red,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Padding(
+                        padding: EdgeInsets.all(10),
+                        child: Text(
+                          'Close',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  WoltModalSheetPage _buildPublicRoomSheet(
-      BuildContext context, bool isDarkMode) {
-    final tileColor = isDarkMode ? Colors.white : Colors.black;
-    return WoltModalSheetPage(
-      hasSabGradient: false,
-      topBarTitle: Text('Public Room', style: TextStyle(color: tileColor)),
-      backgroundColor:
-          isDarkMode ? const Color(0xFF1F2937) : const Color(0xFFF9FAFB),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ListTile(
-          leading: Icon(Iconsax.link_21, color: tileColor),
-          title: Text('Join Public Room', style: TextStyle(color: tileColor)),
-          onTap: () {
-            WoltModalSheet.of(context).showNext();
-          },
-        ),
-      ),
-    );
-  }
-
   WoltModalSheetPage _buildPublicRoomQrCodePage(
-      BuildContext context, bool isDarkMode) {
+    BuildContext context,
+    bool isDarkMode,
+  ) {
     final tileColor = isDarkMode ? Colors.white : Colors.black;
     final pin = (100000 + Random().nextInt(900000)).toString();
     return WoltModalSheetPage(
+      isTopBarLayerAlwaysVisible: true,
+      hasTopBarLayer: true,
       hasSabGradient: false,
-      topBarTitle:
-          Text('Public Room Code', style: TextStyle(color: tileColor)),
-      backgroundColor:
-          isDarkMode ? const Color(0xFF1F2937) : const Color(0xFFF9FAFB),
+      topBar: Container(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+        color: connectionColor('public room').withValues(alpha: 0.2),
+        child: Text(
+          'Public room',
+          style: TextStyle(
+            color: connectionColor('public room').withValues(alpha: 0.8),
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ),
+      backgroundColor: isDarkMode
+          ? const Color(0xFF1F2937)
+          : const Color(0xFFF9FAFB),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            const SizedBox(height: 10),
             QrImageView(
               data: pin,
               version: QrVersions.auto,
               size: 200.0,
               backgroundColor: Colors.white,
             ),
-            const SizedBox(height: 20),
-            Text(
-              'Your PIN is:',
-              style: TextStyle(color: tileColor, fontSize: 18),
-            ),
             const SizedBox(height: 10),
             Text(
-              pin,
+              '${pin.substring(0, 3)} ${pin.substring(3, 6)}',
               style: TextStyle(
                 color: tileColor,
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 8,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Share this pin or QR code to let others\njoin the public room',
+              style: TextStyle(
+                color: tileColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            Divider(color: tileColor, thickness: 1),
+            const SizedBox(height: 10),
+            Text(
+              'OR',
+              style: TextStyle(
+                color: tileColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Pinput(
+              length: 6,
+              defaultPinTheme: PinTheme(
+                width: 60,
+                height: 60,
+                textStyle: TextStyle(
+                  fontSize: 20,
+                  color: tileColor,
+                  fontWeight: FontWeight.w600,
+                ),
+                decoration: BoxDecoration(
+                  border: Border.all(color: tileColor.withValues(alpha: 0.5)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              separatorBuilder: (index) => index == 2
+                  ? const SizedBox(width: 20)
+                  : const SizedBox(width: 5),
+              onCompleted: (value) {
+                debugPrint(value);
+              },
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter a valid pin';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Enter pin from another device to join room',
+              style: TextStyle(
+                color: tileColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      backgroundColor: connectionColor('public room'),
+                    ),
+                    onPressed: () {
+                      debugPrint('Join room');
+                      // TODO: Implement pairing logic
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.all(10),
+                      child: Text(
+                        'Join room',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      backgroundColor: Colors.red,
+                    ),
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Padding(
+                      padding: EdgeInsets.all(10),
+                      child: Text(
+                        'Close',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -749,8 +866,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return WoltModalSheetPage(
       hasSabGradient: false,
       topBarTitle: Text('About ZappShare', style: TextStyle(color: tileColor)),
-      backgroundColor:
-          isDarkMode ? const Color(0xFF1F2937) : const Color(0xFFF9FAFB),
+      backgroundColor: isDarkMode
+          ? const Color(0xFF1F2937)
+          : const Color(0xFFF9FAFB),
       child: const Padding(
         padding: EdgeInsets.all(16.0),
         child: Center(child: Text("ZappShare v1.0.0")),
