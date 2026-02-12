@@ -45,5 +45,13 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs access to the camera for WebRTC communication.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app needs access to the microphone for WebRTC communication.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+    <string>This app uses Bluetooth to find and connect to nearby devices.</string>
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>This app uses Bluetooth to find and connect to nearby devices.</string>
 </dict>
 </plist>

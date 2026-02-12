@@ -1,155 +1,339 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:pinput/pinput.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/colors/app_colors.dart';
 import '../../core/provider/theme_provider.dart';
+import '../../core/provider/webrtc_provider.dart';
 
 Future<dynamic> buildMobileQrCodeDialog(
   BuildContext context,
-  String pin,
-) async {
+  String pin, {
+  required WebRTCProvider webrtcProvider,
+}) async {
+  final isMobileDevice = defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
   return showDialog(
-    barrierDismissible: false,
+    barrierDismissible: isMobileDevice,
     context: context,
     builder: (context) {
+      final enteredPinHolder = <String?>[null];
       final isDarkMode =
           Provider.of<ThemeProvider>(context, listen: false).themeMode ==
           ThemeMode.dark;
       final tileColor = isDarkMode ? Colors.white : Colors.black;
+      final screenWidth = MediaQuery.of(context).size.width;
+      final isMobile = screenWidth < 400;
+      
+      // Create a ScrollController to control scrolling
+      final scrollController = ScrollController();
+      
+      // Scroll to bottom after the dialog is built
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (scrollController.hasClients) {
+          scrollController.animateTo(
+            scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+      
       return AlertDialog(
         backgroundColor: isDarkMode
             ? const Color(0xFF1F2937)
-            : const Color(0xFFF9FAFB),
-        titlePadding: const EdgeInsets.all(0),
+            : const Color(0xFFF9FAFB).withValues(alpha: 0.98),
+        insetPadding: EdgeInsets.symmetric(horizontal: 20),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        titlePadding: EdgeInsets.zero,
         title: Container(
-          padding: const EdgeInsets.fromLTRB(24.0, 24.0, 24.0, 20.0),
+          padding: EdgeInsets.symmetric(
+            horizontal: isMobile ? 16.sp : 24,
+            vertical: isMobile ? 16.sp : 20,
+          ),
           decoration: BoxDecoration(
-            color: connectionColor('paired device').withAlpha(50),
+            color: connectionColor('paired device').withValues(alpha: 0.2),
             borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(28.0),
-              topRight: Radius.circular(28.0),
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+            border: Border(
+              bottom: BorderSide(
+                color: isDarkMode ? const Color(0xFF374151) : const Color(0xFFE5E7EB),
+              ),
             ),
           ),
           child: Text(
             'Pair with a device',
             style: TextStyle(
               color: connectionColor('paired device'),
-              fontSize: 18,
+              fontSize: isMobile ? 16 : 18,
               fontWeight: FontWeight.bold,
             ),
             textAlign: TextAlign.center,
           ),
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 200,
-              height: 200,
-              child: QrImageView(
-                data: pin,
-                version: QrVersions.auto,
-                size: 200,
-                backgroundColor: Colors.white,
+        contentPadding: EdgeInsets.all(isMobile ? 16.sp : 24),
+        content: Consumer<WebRTCProvider>(
+          builder: (context, webrtc, _) {
+            final activeRoomId = webrtc.roomId;
+            if (activeRoomId != null && activeRoomId.isNotEmpty) {
+              return SingleChildScrollView(
+                controller: scrollController,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Active room',
+                      style: TextStyle(
+                        color: tileColor,
+                        fontSize: isMobile ? 14 : 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: isMobile ? 12.sp : 16),
+                    SizedBox(
+                      width: isMobile ? 184 : 232,
+                      height: isMobile ? 184 : 232,
+                      child: Container(
+                        padding: EdgeInsets.all(isMobile ? 12.sp : 16),
+                        decoration: BoxDecoration(
+                          color: isDarkMode
+                              ? const Color(0xFF374151).withValues(alpha: 0.5)
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isDarkMode
+                                ? const Color(0xFF374151)
+                                : const Color(0xFFE5E7EB),
+                          ),
+                        ),
+                        child: QrImageView(
+                          data: activeRoomId,
+                          version: QrVersions.auto,
+                          size: isMobile ? 160.sp : 200,
+                          backgroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: isMobile ? 12.sp : 16),
+                    Text(
+                      activeRoomId,
+                      style: TextStyle(
+                        color: tileColor,
+                        fontSize: isMobile ? 28 : 32,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: isMobile ? 3 : 4,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: isMobile ? 16 : 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          webrtc.leaveRoom();
+                          Navigator.of(context).pop();
+                        },
+                        icon: const Icon(Icons.logout, size: 18),
+                        label: const Text('Exit room'),
+                        style: ElevatedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          backgroundColor: Colors.red,
+                          foregroundColor: AppColors.whiteColor,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isMobile ? 12.0 : 16.0,
+                            vertical: isMobile ? 12.0 : 14.0,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return SingleChildScrollView(
+              controller: scrollController,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: isMobile ? 184 : 232,
+                    height: isMobile ? 184 : 232,
+                    child: Container(
+                      padding: EdgeInsets.all(isMobile ? 12.sp : 16),
+                      decoration: BoxDecoration(
+                        color: isDarkMode
+                            ? const Color(0xFF374151).withValues(alpha: 0.5)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isDarkMode
+                              ? const Color(0xFF374151)
+                              : const Color(0xFFE5E7EB),
+                        ),
+                      ),
+                      child: QrImageView(
+                        data: pin,
+                        version: QrVersions.auto,
+                        size: isMobile ? 160.sp : 200,
+                        backgroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: isMobile ? 4 : 5),
+                  Text(
+                    pin,
+                    style: TextStyle(
+                      color: tileColor,
+                      fontSize: isMobile ? 28 : 32,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: isMobile ? 3 : 4,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: isMobile ? 4 : 5),
+                  Text(
+                    'Share this pin or QR code to let others\npair with your device',
+                    style: TextStyle(
+                      color: tileColor,
+                      fontSize: isMobile ? 13 : 14,
+                      fontWeight: FontWeight.w400,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: isMobile ? 4 : 5),
+                  Divider(color: tileColor, thickness: 1),
+                  SizedBox(height: isMobile ? 4 : 5),
+                  Text(
+                    'OR',
+                    style: TextStyle(
+                      color: tileColor,
+                      fontSize: isMobile ? 13 : 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: isMobile ? 8 : 10),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: isMobile ? 8.0 : 0),
+                    child: Pinput(
+                      length: 4,
+                      defaultPinTheme: PinTheme(
+                        width: isMobile ? 45 : 60,
+                        height: isMobile ? 45 : 60,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: tileColor.withValues(alpha: 0.5)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        textStyle: TextStyle(
+                          fontSize: isMobile ? 18 : 20,
+                          color: tileColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      separatorBuilder: (index) => SizedBox(width: isMobile ? 8 : 15),
+                      onCompleted: (value) {
+                        enteredPinHolder[0] = value;
+                      },
+                      validator: (value) =>
+                          (value == null || value.isEmpty) ? 'Please enter a valid pin' : null,
+                    ),
+                  ),
+                  SizedBox(height: isMobile ? 16 : 20),
+                  Text(
+                    'Enter pin from another device to pair',
+                    style: TextStyle(
+                      color: tileColor,
+                      fontSize: isMobile ? 11 : 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 5),
-            Text(
-             pin,
-              style: TextStyle(
-                color: tileColor,
-                fontSize: 32,   
-                fontWeight: FontWeight.bold,
-                letterSpacing: 4,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 5),
-            Text(
-              'Share this pin or QR code to let others\npair with your device',
-              style: TextStyle(
-                color: tileColor,
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 5),
-            Divider(color: tileColor, thickness: 1),
-            const SizedBox(height: 5),
-            Text(
-              'OR',
-              style: TextStyle(
-                color: tileColor,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 10),
-            Pinput(
-              length: 4,
-              separatorBuilder: (index) => const SizedBox(width: 15),
-              onCompleted: (value) {
-                debugPrint(value);
-              },
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter a valid pin';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 20),
-            Text('Enter pin from another device to pair', style: TextStyle(color: tileColor, fontSize: 12, fontWeight: FontWeight.w600), textAlign: TextAlign.center,),
-            // const SizedBox(height: 5),
-          ],
+            );
+          },
+        ),
+        actionsPadding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 8.0 : 24.0,
+          vertical: isMobile ? 8.0 : 16.0,
         ),
         actions: [
-          Row(
-            spacing: 10,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+          Consumer<WebRTCProvider>(
+          builder: (context, webrtc, _) {
+            if (webrtc.roomId != null && webrtc.roomId!.isNotEmpty) {
+              return const SizedBox.shrink();
+            }
+            return Wrap(
+              alignment: WrapAlignment.center,
+              spacing: isMobile ? 8 : 10,
+              runSpacing: 8,
+              children: [
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    backgroundColor: connectionColor('paired device'),
+                    foregroundColor: isDarkMode ? Colors.black : Colors.white,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 12.0 : 16.0,
+                      vertical: isMobile ? 10.0 : 12.0,
+                    ),
                   ),
-                  backgroundColor: connectionColor('paired device'),
-                  foregroundColor: isDarkMode ? Colors.black : Colors.white,
-                ),
-                onPressed: () {
-                  debugPrint('Pair with device');
-                },
-                child: Padding(
-                  padding: const EdgeInsets.all(10),
+                  onPressed: () {
+                    final roomPin = enteredPinHolder[0] ?? pin;
+                    webrtcProvider.joinRoom(roomPin);
+                    Navigator.of(context).pop();
+                  },
                   child: Text(
-                    'Pair with device',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, ),
+                    'Pair',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: isMobile ? 12 : 14,
+                    ),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    backgroundColor: Colors.red,
+                    foregroundColor: AppColors.whiteColor,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 12.0 : 16.0,
+                      vertical: isMobile ? 10.0 : 12.0,
+                    ),
                   ),
-                  backgroundColor: Colors.red,
-                  foregroundColor: AppColors.whiteColor,
-                ),
-                onPressed: () => Navigator.of(context).pop(),
-                child: Padding(
-                  padding: const EdgeInsets.all(10),
+                  onPressed: () => Navigator.of(context).pop(),
                   child: Text(
                     'Close',
-                    style: TextStyle(color: AppColors.whiteColor, fontWeight: FontWeight.bold, ),
+                    style: TextStyle(
+                      color: AppColors.whiteColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: isMobile ? 12 : 14,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            );
+          },
+        ),
         ],
       );
     },
@@ -158,110 +342,283 @@ Future<dynamic> buildMobileQrCodeDialog(
 
 Future<dynamic> buildMobilePublicRoomQrCodeDialog(
   BuildContext context,
-  String pin,
-) async {
+  String pin, {
+  required WebRTCProvider webrtcProvider,
+}) async {
+  final isMobileDevice = defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
   return showDialog(
-    barrierDismissible: false,
+    barrierDismissible: isMobileDevice,
     context: context,
     builder: (context) {
+      final enteredPinHolder = <String?>[null];
       final isDarkMode =
           Provider.of<ThemeProvider>(context, listen: false).themeMode ==
           ThemeMode.dark;
       final tileColor = isDarkMode ? Colors.white : Colors.black;
+      final screenWidth = MediaQuery.of(context).size.width;
+      final isMobile = screenWidth < 400;
+
+      // Create a ScrollController to control scrolling
+      final scrollController = ScrollController();
+      
+      // Scroll to bottom after the dialog is built
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (scrollController.hasClients) {
+          scrollController.animateTo(
+            scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
 
       return AlertDialog(
         backgroundColor: isDarkMode
             ? const Color(0xFF1F2937)
-            : const Color(0xFFF9FAFB),
-        titlePadding: const EdgeInsets.all(0),
+            : const Color(0xFFF9FAFB).withValues(alpha: 0.98),
+        insetPadding: EdgeInsets.symmetric(horizontal: 20),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        titlePadding: EdgeInsets.zero,
         title: Container(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+          padding: EdgeInsets.symmetric(
+            horizontal: isMobile ? 16.sp : 24,
+            vertical: isMobile ? 16.sp : 20,
+          ),
           decoration: BoxDecoration(
-            color: connectionColor('public room').withAlpha(50),
+            color: connectionColor('public room').withValues(alpha: 0.2),
             borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(28),
-              topRight: Radius.circular(28),
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+            border: Border(
+              bottom: BorderSide(
+                color: isDarkMode ? const Color(0xFF374151) : const Color(0xFFE5E7EB),
+              ),
             ),
           ),
           child: Text(
-            'Public Room',
+            'Public room',
             style: TextStyle(
               color: connectionColor('public room'),
-              fontSize: 18,
+              fontSize: isMobile ? 16 : 18,
               fontWeight: FontWeight.bold,
             ),
             textAlign: TextAlign.center,
           ),
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 200,
-              height: 200,
-              child: QrImageView(
-                data: pin,
-                version: QrVersions.auto,
-                size: 200,
-                backgroundColor: Colors.white,
+        contentPadding: EdgeInsets.all(isMobile ? 16.sp : 24),
+        content: Consumer<WebRTCProvider>(
+          builder: (context, webrtc, _) {
+            final activeRoomId = webrtc.roomId;
+            if (activeRoomId != null && activeRoomId.isNotEmpty) {
+              return SingleChildScrollView(
+                controller: scrollController,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Active room',
+                      style: TextStyle(
+                        color: tileColor,
+                        fontSize: isMobile ? 14 : 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: isMobile ? 12.sp : 16),
+                    SizedBox(
+                      width: isMobile ? 184 : 232,
+                      height: isMobile ? 184 : 232,
+                      child: Container(
+                        padding: EdgeInsets.all(isMobile ? 12.sp : 16),
+                        decoration: BoxDecoration(
+                          color: isDarkMode
+                              ? const Color(0xFF374151).withValues(alpha: 0.5)
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isDarkMode
+                                ? const Color(0xFF374151)
+                                : const Color(0xFFE5E7EB),
+                          ),
+                        ),
+                        child: QrImageView(
+                          data: activeRoomId,
+                          version: QrVersions.auto,
+                          size: isMobile ? 160.sp : 200,
+                          backgroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: isMobile ? 12.sp : 16),
+                    Text(
+                      activeRoomId.length == 6
+                          ? '${activeRoomId.substring(0, 3)} ${activeRoomId.substring(3, 6)}'
+                          : activeRoomId,
+                      style: TextStyle(
+                        color: tileColor,
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 8,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: isMobile ? 16 : 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          webrtc.leaveRoom();
+                          Navigator.of(context).pop();
+                        },
+                        icon: const Icon(Icons.logout, size: 18),
+                        label: const Text('Exit room'),
+                        style: ElevatedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          backgroundColor: Colors.red,
+                          foregroundColor: AppColors.whiteColor,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isMobile ? 12.0 : 16.0,
+                            vertical: isMobile ? 12.0 : 14.0,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return SingleChildScrollView(
+              controller: scrollController,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: isMobile ? 184 : 232,
+                    height: isMobile ? 184 : 232,
+                    child: Container(
+                      padding: EdgeInsets.all(isMobile ? 12.sp : 16),
+                      decoration: BoxDecoration(
+                        color: isDarkMode
+                            ? const Color(0xFF374151).withValues(alpha: 0.5)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isDarkMode
+                              ? const Color(0xFF374151)
+                              : const Color(0xFFE5E7EB),
+                        ),
+                      ),
+                      child: QrImageView(
+                        data: pin,
+                        version: QrVersions.auto,
+                        size: isMobile ? 160.sp : 200,
+                        backgroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: isMobile ? 12.sp : 16),
+                  Text(
+                    '${pin.substring(0, 3)} ${pin.substring(3, 6)}',
+                    style: TextStyle(
+                      color: tileColor,
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 8,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    'Share this pin or QR code to let others\njoin the public room',
+                    style: TextStyle(
+                      color: tileColor,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 5),
+                  Divider(color: tileColor, thickness: 1),
+                  const SizedBox(height: 5),
+                  Text(
+                    'OR',
+                    style: TextStyle(
+                      color: tileColor,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 10),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: isMobile ? 8.0 : 0),
+                    child: Pinput(
+                      length: 6,
+                      defaultPinTheme: PinTheme(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: tileColor.withValues(alpha: 0.5)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        width: isMobile ? 40 : 60,
+                        height: isMobile ? 40 : 60,
+                        textStyle: TextStyle(
+                          fontSize: isMobile ? 18 : 20,
+                          color: tileColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      separatorBuilder: (index) => SizedBox(
+                        width: index == 2
+                            ? (isMobile ? 10 : 20)
+                            : (isMobile ? 3 : 5),
+                      ),
+                      onCompleted: (value) {
+                        enteredPinHolder[0] = value;
+                      },
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter a valid pin';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Enter pin from another device to join room',
+                    style: TextStyle(
+                      color: tileColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 5),
-            Text(
-               '${pin.substring(0, 3)} ${pin.substring(3, 6)}',
-              style: TextStyle(
-                color: tileColor,
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 8,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 5),
-            Text(
-              'Share this pin or QR code to let others\njoin the public room',
-              style: TextStyle(
-                color: tileColor,
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 5),
-            Divider(color: tileColor, thickness: 1),
-            const SizedBox(height: 5),
-            Text(
-              'OR',
-              style: TextStyle(
-                color: tileColor,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 10),
-            Pinput(
-              length: 6,
-              separatorBuilder: (index) => index == 2 ? const SizedBox(width: 20) : const SizedBox(width: 5),
-              onCompleted: (value) {
-                debugPrint(value);
-              },
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter a valid pin';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 20),
-            Text('Enter pin from another device to join room', style: TextStyle(color: tileColor, fontSize: 12, fontWeight: FontWeight.w600), textAlign: TextAlign.center,),
-            // const SizedBox(height: 5),
-          ],
+            );
+          },
+        ),
+        actionsPadding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 8.0 : 24.0,
+          vertical: isMobile ? 8.0 : 16.0,
         ),
         actions: [
-          Row(
-            spacing: 10,
-            mainAxisAlignment: MainAxisAlignment.center,
+          Consumer<WebRTCProvider>(
+          builder: (context, webrtc, _) {
+            if (webrtc.roomId != null && webrtc.roomId!.isNotEmpty) {
+              return const SizedBox.shrink();
+            }
+            return Wrap(
+              alignment: WrapAlignment.center,
+              spacing: isMobile ? 8 : 10,
+            runSpacing: 8,
             children: [
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
@@ -270,18 +627,27 @@ Future<dynamic> buildMobilePublicRoomQrCodeDialog(
                   ),
                   backgroundColor: connectionColor('public room'),
                   foregroundColor: isDarkMode ? Colors.black : Colors.white,
-                ),
-                onPressed: () {
-                  debugPrint('Join room');
-                },
-                child: Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Text(
-                    'Join Room',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, ),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 12.0 : 16.0,
+                    vertical: isMobile ? 10.0 : 12.0,
                   ),
                 ),
-              ),
+                onPressed: () {
+                  final roomPin = enteredPinHolder[0] ?? pin;
+                  webrtcProvider.joinRoom(roomPin);
+                  Navigator.of(context).pop();
+                },
+                child: Text(
+                  'Join',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: isMobile ? 12 : 14,
+                    ),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
@@ -289,18 +655,26 @@ Future<dynamic> buildMobilePublicRoomQrCodeDialog(
                   ),
                   backgroundColor: Colors.red,
                   foregroundColor: AppColors.whiteColor,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 12.0 : 16.0,
+                    vertical: isMobile ? 10.0 : 12.0,
+                  ),
                 ),
                 onPressed: () => Navigator.of(context).pop(),
-                child: Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Text(
-                    'Close',
-                    style: TextStyle(color: AppColors.whiteColor, fontWeight: FontWeight.bold, ),
+                child: Text(
+                  'Close',
+                  style: TextStyle(
+                    color: AppColors.whiteColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: isMobile ? 12 : 14,
                   ),
+                  textAlign: TextAlign.center,
                 ),
               ),
             ],
-          ),
+            );
+          },
+        ),
         ],
       );
     },

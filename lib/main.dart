@@ -5,12 +5,16 @@ import 'package:provider/provider.dart';
 
 import 'core/colors/app_colors.dart';
 import 'core/provider/theme_provider.dart';
+import 'core/provider/webrtc_provider.dart';
 import 'core/router/app_router.dart';
 
 void main() {
   runApp(
-    ChangeNotifierProvider(
-      create: (context) => ThemeProvider(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => ThemeProvider()),
+        ChangeNotifierProvider(create: (context) => WebRTCProvider()),
+      ],
       child: const MyApp(),
     ),
   );
