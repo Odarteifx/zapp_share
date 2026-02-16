@@ -45,6 +45,16 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
       };
+      webrtcProvider.onFileReceiveError = (name, error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to receive: $name'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      };
     });
   }
 
@@ -167,11 +177,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 IconButton(
                                   onPressed: () {
+                                    final pin = (1000 + Random().nextInt(9000)).toString();
+                                    final webrtc = Provider.of<WebRTCProvider>(context, listen: false);
+                                    webrtc.joinRoom(pin);
                                     WoltModalSheet.show(
                                       context: context,
                                       pageListBuilder: (ctx) {
                                         return [
-                                          _buildQrCodePage(ctx, isDarkMode),
+                                          _buildQrCodePage(ctx, isDarkMode, pin),
                                         ];
                                       },
                                     );
@@ -352,113 +365,95 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                             ),
-                            Expanded(
-                              child: Consumer<WebRTCProvider>(
-                                builder: (context, webrtcProvider, child) {
-                                  final hasFilesToSend =
-                                      webrtcProvider.isDataChannelOpen &&
-                                          pickedFiles.isNotEmpty;
-                                  final showSendBanner = hasFilesToSend;
+            Expanded(
+              child: Consumer<WebRTCProvider>(
+                builder: (context, webrtcProvider, child) {
+                  final hasFilesToSend =
+                      webrtcProvider.isDataChannelOpen &&
+                          pickedFiles.isNotEmpty;
+                  final showSendBanner = hasFilesToSend;
+                  final isInRoom = webrtcProvider.roomId != null &&
+                      webrtcProvider.roomId!.isNotEmpty;
+                  final isPublicRoom = webrtcProvider.isInPublicRoom;
+                  final visiblePeers = isInRoom
+                      ? webrtcProvider.peers
+                      : <String>[];
 
-                                  return Column(
-                                    children: [
-                                      if (showSendBanner) ...[
-                                        Padding(
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal: isMobile ? 12.sp : 20,
-                                            vertical: isMobile ? 8.sp : 12,
-                                          ),
-                                          child: Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              Text(
-                                                '${pickedFiles.length} file(s) ready',
-                                                style: TextStyle(
-                                                  fontSize: isMobile ? 12.sp : 14,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: isDarkMode
-                                                      ? Colors.white
-                                                      : Colors.black,
-                                                ),
-                                              ),
-                                              SizedBox(width: isMobile ? 12.sp : 16),
-                                              ElevatedButton.icon(
-                                                onPressed: () {
-                                                  webrtcProvider.sendFiles(pickedFiles);
-                                                  setState(() => pickedFiles = []);
-                                                },
-                                                icon: const Icon(Iconsax.send_1, size: 18),
-                                                label: const Text('Send'),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                      Expanded(
-                                        child: webrtcProvider.peers.isEmpty
-                                            ? Column(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.center,
-                                                children: [
-                                                  Icon(
-                                                    Iconsax.people,
-                                                    size: 48,
-                                                    color: AppColors.softGray,
-                                                  ),
-                                                  SizedBox(height: isMobile ? 12.sp : 16),
-                                                  Text(
-                                                    'No users on the network yet',
-                                                    textAlign: TextAlign.center,
-                                                    style: TextStyle(
-                                                      fontSize: MediaQuery.of(context)
-                                                                  .size
-                                                                  .width >
-                                                              600
-                                                          ? 14
-                                                          : 12,
-                                                      fontWeight: FontWeight.w600,
-                                                      color: isDarkMode
-                                                          ? Colors.white
-                                                          : Colors.black,
-                                                    ),
-                                                  ),
-                                                  SizedBox(height: isMobile ? 4.sp : 6),
-                                                  Text(
-                                                    'Pair with a device or join a public room\nto see others nearby',
-                                                    textAlign: TextAlign.center,
-                                                    style: TextStyle(
-                                                      fontSize: MediaQuery.of(context)
-                                                                  .size
-                                                                  .width >
-                                                              600
-                                                          ? 12
-                                                          : 10,
-                                                      color: AppColors.softGray,
-                                                      fontWeight: FontWeight.w400,
-                                                    ),
-                                                  ),
-                                                ],
-                                              )
-                                            : LayoutBuilder(
-                                                builder: (context, constraints) {
-                                                  return _buildSolarLayout(
-                                                    constraints: constraints,
-                                                    peers: webrtcProvider.peers,
-                                                    webrtcProvider: webrtcProvider,
-                                                    isDarkMode: isDarkMode,
-                                                    useMobileLayout: useMobileLayout || isMacMini,
-                                                  );
-                                                },
-                                              ),
-                                  ),
-                                    ],
+                  return Column(
+                    children: [
+                      // ── File transfer progress bar ──
+                      if (webrtcProvider.isTransferring)
+                        _buildTransferProgressBar(
+                          webrtcProvider: webrtcProvider,
+                          isDarkMode: isDarkMode,
+                          isMobile: isMobile,
+                        ),
+                      if (showSendBanner) ...[
+                        Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isMobile ? 12.sp : 20,
+                            vertical: isMobile ? 8.sp : 12,
+                          ),
+                          child: Row(
+                            mainAxisAlignment:
+                                MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                '${pickedFiles.length} file(s) ready',
+                                style: TextStyle(
+                                  fontSize: isMobile ? 12.sp : 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDarkMode
+                                      ? Colors.white
+                                      : Colors.black,
+                                ),
+                              ),
+                              SizedBox(width: isMobile ? 12.sp : 16),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  if (isPublicRoom) {
+                                    // Show device picker dialog before sending.
+                                    _showDevicePickerDialog(
+                                      context: context,
+                                      webrtcProvider: webrtcProvider,
+                                      isDarkMode: isDarkMode,
+                                    );
+                                  } else {
+                                    webrtcProvider.sendFiles(pickedFiles);
+                                    setState(() => pickedFiles = []);
+                                  }
+                                },
+                                icon: const Icon(Iconsax.send_1, size: 18),
+                                label: const Text('Send'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      Expanded(
+                        child: visiblePeers.isEmpty
+                            ? _buildEmptyState(
+                                isInRoom: isInRoom,
+                                isDarkMode: isDarkMode,
+                                isMobile: isMobile,
+                              )
+                            : LayoutBuilder(
+                                builder: (context, constraints) {
+                                  return _buildSolarLayout(
+                                    constraints: constraints,
+                                    peers: visiblePeers,
+                                    webrtcProvider: webrtcProvider,
+                                    isDarkMode: isDarkMode,
+                                    useMobileLayout: useMobileLayout || isMacMini,
                                   );
                                 },
                               ),
-                            ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
                           ],
                         ),
                       ),
@@ -556,6 +551,539 @@ class _HomeScreenState extends State<HomeScreen> {
             )
           : null,
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // File transfer progress bar
+  // ---------------------------------------------------------------------------
+
+  Widget _buildTransferProgressBar({
+    required WebRTCProvider webrtcProvider,
+    required bool isDarkMode,
+    required bool isMobile,
+  }) {
+    final isSending = webrtcProvider.transferIsSending == true;
+    final fileName = webrtcProvider.transferFileName ?? '';
+    final progress = webrtcProvider.transferProgress;
+    final percent = (progress * 100).toStringAsFixed(0);
+    final transferred = _formatBytes(webrtcProvider.transferredBytes);
+    final total = _formatBytes(webrtcProvider.transferTotalBytes);
+    final accentColor = isSending ? Colors.blue : Colors.green;
+    final peerName = webrtcProvider.transferTargetPeerName;
+    final targetIdx = webrtcProvider.transferTargetIndex;
+    final targetCount = webrtcProvider.transferTargetCount;
+
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 50.sp : 150,
+        vertical: isMobile ? 6.sp : 10
+      ),
+      child: Container(
+        padding: EdgeInsets.all(isMobile ? 12.sp : 14),
+        decoration: BoxDecoration(
+          color: accentColor.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: accentColor.withValues(alpha: 0.25),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  isSending ? Iconsax.send_1 : Iconsax.receive_square,
+                  size: isMobile ? 16.sp : 18,
+                  color: accentColor,
+                ),
+                SizedBox(width: isMobile ? 8.sp : 10),
+                Expanded(
+                  child: Text(
+                    isSending
+                        ? (targetCount > 1
+                            ? 'Sending: $fileName → ${peerName ?? ''} ($targetIdx/$targetCount)'
+                            : 'Sending: $fileName${peerName != null ? ' → $peerName' : ''}')
+                        : 'Receiving: $fileName${peerName != null ? ' from $peerName' : ''}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: isMobile ? 11.sp : 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDarkMode ? Colors.white : Colors.black,
+                    ),
+                  ),
+                ),
+                Text(
+                  '$percent%',
+                  style: TextStyle(
+                    fontSize: isMobile ? 11.sp : 13,
+                    fontWeight: FontWeight.w700,
+                    color: accentColor,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: isMobile ? 8.sp : 10),
+            ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 200, maxWidth: 500),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: isMobile ? 6 : 7,
+                  backgroundColor: accentColor.withValues(alpha: 0.15),
+                  valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+                ),
+              ),
+            ),
+            SizedBox(height: isMobile ? 4.sp : 6),
+            Text(
+              '$transferred / $total',
+              style: TextStyle(
+                fontSize: isMobile ? 9.sp : 11,
+                color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Empty state placeholder
+  // ---------------------------------------------------------------------------
+
+  Widget _buildEmptyState({
+    required bool isInRoom,
+    required bool isDarkMode,
+    required bool isMobile,
+  }) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Icon(
+          Iconsax.people,
+          size: 48,
+          color: AppColors.softGray,
+        ),
+        SizedBox(height: isMobile ? 12.sp : 16),
+        Text(
+          isInRoom
+              ? 'Waiting for others to join…'
+              : 'No devices visible',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: MediaQuery.of(context).size.width > 600 ? 14 : 12,
+            fontWeight: FontWeight.w600,
+            color: isDarkMode ? Colors.white : Colors.black,
+          ),
+        ),
+        SizedBox(height: isMobile ? 4.sp : 6),
+        Text(
+          isInRoom
+              ? 'Share the room PIN so others can join'
+              : 'Pair with a device or join a public room\nto see others nearby',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: MediaQuery.of(context).size.width > 600 ? 12 : 10,
+            color: AppColors.softGray,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Public room – device picker dialog (shown before sending)
+  // ---------------------------------------------------------------------------
+
+  void _showDevicePickerDialog({
+    required BuildContext context,
+    required WebRTCProvider webrtcProvider,
+    required bool isDarkMode,
+  }) {
+    // Snapshot the connected peers at dialog-open time.
+    // Selection state lives inside the dialog via StatefulBuilder.
+    final connectedIds = webrtcProvider.connectedPeerIds;
+    if (connectedIds.isEmpty) return;
+
+    var dialogSelected = Set<String>.from(connectedIds); // start with all
+    var dialogSelectAll = true;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final isAllSelected = dialogSelectAll ||
+                (connectedIds.isNotEmpty &&
+                    connectedIds.every(dialogSelected.contains));
+
+            return AlertDialog(
+              insetPadding: const EdgeInsets.symmetric(
+                  horizontal: 40, vertical: 24),
+              backgroundColor: isDarkMode
+                  ? const Color(0xFF1F2937)
+                  : const Color(0xFFF9FAFB),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              titlePadding: EdgeInsets.zero,
+              title: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 20, vertical: 16),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.08),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                  ),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: isDarkMode
+                          ? const Color(0xFF374151)
+                          : const Color(0xFFE5E7EB),
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+
+                    Expanded(
+                      child: Text(
+                        'Send to devices',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: isDarkMode ? Colors.white : Colors.black,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '${pickedFiles.length} file(s)',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              contentPadding: const EdgeInsets.fromLTRB(0, 8, 0, 0),
+              content: SizedBox(
+                width: 340,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // ── "All Devices" row ──
+                    InkWell(
+                      onTap: () {
+                        setDialogState(() {
+                          if (isAllSelected) {
+                            dialogSelectAll = false;
+                            dialogSelected.clear();
+                          } else {
+                            dialogSelectAll = true;
+                            dialogSelected = Set.from(connectedIds);
+                          }
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 10),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: Checkbox(
+                                value: isAllSelected,
+                                onChanged: (_) {
+                                  setDialogState(() {
+                                    if (isAllSelected) {
+                                      dialogSelectAll = false;
+                                      dialogSelected.clear();
+                                    } else {
+                                      dialogSelectAll = true;
+                                      dialogSelected =
+                                          Set.from(connectedIds);
+                                    }
+                                  });
+                                },
+                                activeColor: Colors.blue,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'All Devices',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDarkMode
+                                      ? Colors.white
+                                      : Colors.black,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '${dialogSelected.length} of ${connectedIds.length}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Divider(
+                      height: 1,
+                      color: isDarkMode
+                          ? const Color(0xFF374151)
+                          : const Color(0xFFE5E7EB),
+                    ),
+
+                    // ── Individual devices ──
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 320),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: connectedIds.length,
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        itemBuilder: (_, index) {
+                          final peerId = connectedIds.elementAt(index);
+                          final isSelected =
+                              dialogSelected.contains(peerId);
+                          final peerName =
+                              WebRTCProvider.parsePeerName(peerId);
+                          final peerPlatform =
+                              WebRTCProvider.parsePeerPlatform(peerId);
+                          final platformLabel =
+                              WebRTCProvider.platformDisplayName(
+                                  peerPlatform);
+                          final peerIcon =
+                              _iconForPlatform(peerPlatform);
+
+                          return InkWell(
+                            onTap: () {
+                              setDialogState(() {
+                                dialogSelectAll = false;
+                                if (isSelected) {
+                                  dialogSelected.remove(peerId);
+                                } else {
+                                  dialogSelected.add(peerId);
+                                }
+                                if (dialogSelected
+                                    .containsAll(connectedIds)) {
+                                  dialogSelectAll = true;
+                                }
+                              });
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 8),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: Checkbox(
+                                      value: isSelected,
+                                      onChanged: (value) {
+                                        setDialogState(() {
+                                          dialogSelectAll = false;
+                                          if (value == true) {
+                                            dialogSelected.add(peerId);
+                                          } else {
+                                            dialogSelected.remove(peerId);
+                                          }
+                                          if (dialogSelected
+                                              .containsAll(connectedIds)) {
+                                            dialogSelectAll = true;
+                                          }
+                                        });
+                                      },
+                                      activeColor: Colors.blue,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(4),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Container(
+                                    width: 38,
+                                    height: 38,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: isDarkMode
+                                          ? Colors.grey[800]
+                                          : Colors.grey[200],
+                                      border: Border.all(
+                                        color: Colors.green
+                                            .withValues(alpha: 0.5),
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      peerIcon,
+                                      size: 18,
+                                      color: isDarkMode
+                                          ? Colors.white
+                                          : Colors.black,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          peerName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            color: isDarkMode
+                                                ? Colors.white
+                                                : Colors.black,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          platformLabel,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: isDarkMode
+                                                ? Colors.grey[500]
+                                                : Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actionsPadding:
+                  const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              actions: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          side: BorderSide(
+                            color: isDarkMode
+                                ? Colors.grey[600]!
+                                : Colors.grey[300]!,
+                          ),
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            color: isDarkMode
+                                ? Colors.white70
+                                : Colors.black54,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: dialogSelected.isEmpty
+                            ? null
+                            : () {
+                                Navigator.of(ctx).pop();
+                                webrtcProvider.sendFiles(
+                                  pickedFiles,
+                                  targetPeerIds: dialogSelected,
+                                );
+                                setState(() => pickedFiles = []);
+                              },
+                        icon: const Icon(Iconsax.send_1, size: 18),
+                        label: Text(
+                          isAllSelected
+                              ? 'Send to All'
+                              : 'Send to ${dialogSelected.length}',
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor:
+                              Colors.blue.withValues(alpha: 0.3),
+                          disabledForegroundColor:
+                              Colors.white.withValues(alpha: 0.5),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   // ---------------------------------------------------------------------------
@@ -1101,11 +1629,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  WoltModalSheetPage _buildQrCodePage(BuildContext context, bool isDarkMode) {
+  WoltModalSheetPage _buildQrCodePage(BuildContext context, bool isDarkMode, String pin) {
     final webrtcProvider = Provider.of<WebRTCProvider>(context, listen: false);
-    final enteredPinHolder = <String?>[null];
     final tileColor = isDarkMode ? Colors.white : Colors.black;
-    final pin = (1000 + Random().nextInt(9000)).toString();
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
 
@@ -1141,79 +1667,11 @@ class _HomeScreenState extends State<HomeScreen> {
           : const Color(0xFFF9FAFB),
       child: Consumer<WebRTCProvider>(
         builder: (context, webrtc, _) {
-          final activeRoomId = webrtc.roomId;
-          if (activeRoomId != null && activeRoomId.isNotEmpty) {
-            return SingleChildScrollView(
-              padding: EdgeInsets.all(isMobile ? 16.sp : 24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Active room',
-                    style: TextStyle(
-                      color: tileColor,
-                      fontSize: isMobile ? 14 : 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  SizedBox(height: isMobile ? 12.sp : 16),
-                  Container(
-                    padding: EdgeInsets.all(isMobile ? 12.sp : 16),
-                    decoration: BoxDecoration(
-                      color: isDarkMode
-                          ? const Color(0xFF374151).withValues(alpha: 0.5)
-                          : Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: isDarkMode
-                            ? const Color(0xFF374151)
-                            : const Color(0xFFE5E7EB),
-                      ),
-                    ),
-                    child: QrImageView(
-                      data: activeRoomId,
-                      version: QrVersions.auto,
-                      size: isMobile ? 180.sp : 200,
-                      backgroundColor: Colors.white,
-                    ),
-                  ),
-                  SizedBox(height: isMobile ? 12.sp : 16),
-                  Text(
-                    activeRoomId,
-                    style: TextStyle(
-                      color: tileColor,
-                      fontSize: isMobile ? 28 : 32,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: isMobile ? 6 : 8,
-                    ),
-                  ),
-                  SizedBox(height: isMobile ? 16 : 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        webrtc.leaveRoom();
-                        Navigator.of(context).pop();
-                      },
-                      icon: const Icon(Icons.logout, size: 18),
-                      label: const Text('Exit room'),
-                      style: ElevatedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(
-                          vertical: isMobile ? 12 : 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
+          // Auto-close when a peer connects via data channel (1:1 pairing complete).
+          if (webrtc.isDataChannelOpen) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              Navigator.of(context, rootNavigator: true).maybePop();
+            });
           }
           return SingleChildScrollView(
             padding: EdgeInsets.all(isMobile ? 16.sp : 24),
@@ -1296,7 +1754,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 separatorBuilder: (index) => SizedBox(width: isMobile ? 10 : 15),
-                onCompleted: (value) => enteredPinHolder[0] = value,
+                onCompleted: (value) {
+                  if (value.length == 4) {
+                    webrtcProvider.joinRoom(value);
+                    Navigator.of(context).pop();
+                  }
+                },
                 validator: (value) =>
                     (value == null || value.isEmpty) ? 'Please enter a valid pin' : null,
               ),
@@ -1305,7 +1768,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Padding(
               padding: EdgeInsets.symmetric(horizontal: isMobile ? 8.0 : 0),
               child: Text(
-                'Enter pin from another device to pair',
+                'Enter pin from another device to pair instantly',
                 style: TextStyle(
                   color: tileColor,
                   fontSize: isMobile ? 11 : 12,
@@ -1317,107 +1780,30 @@ class _HomeScreenState extends State<HomeScreen> {
             SizedBox(height: isMobile ? 8 : 10),
             Padding(
               padding: EdgeInsets.all(isMobile ? 8.0 : 16.0),
-              child: isMobile
-                  ? Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              backgroundColor: connectionColor('paired device'),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                          onPressed: () {
-                            final roomPin = enteredPinHolder[0] ?? pin;
-                            webrtcProvider.joinRoom(roomPin);
-                            Navigator.of(context).pop();
-                          },
-                          child: const Text(
-                            'Pair with device',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              backgroundColor: Colors.red,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                            onPressed: () => Navigator.of(context).pop(),
-                            child: const Text(
-                              'Close',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            backgroundColor: connectionColor('paired device'),
-                          ),
-                          onPressed: () {
-                            final roomPin = enteredPinHolder[0] ?? pin;
-                            webrtcProvider.joinRoom(roomPin);
-                            Navigator.of(context).pop();
-                          },
-                          child: const Padding(
-                            padding: EdgeInsets.all(10),
-                            child: Text(
-                              'Pair with device',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            backgroundColor: Colors.red,
-                          ),
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Padding(
-                            padding: EdgeInsets.all(10),
-                            child: Text(
-                              'Close',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
                     ),
+                    backgroundColor: Colors.red,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: () {
+                    webrtcProvider.leaveRoom();
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text(
+                    'Close',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -1631,6 +2017,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? (isMobile ? 12 : 20)
                       : (isMobile ? 4 : 5),
                 ),
+                onChanged: (value) => enteredPinHolder[0] = value,
                 onCompleted: (value) => enteredPinHolder[0] = value,
                 validator: (value) =>
                     (value == null || value.isEmpty) ? 'Please enter a valid pin' : null,
@@ -1667,7 +2054,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                             onPressed: () {
-                              final roomPin = enteredPinHolder[0] ?? pin;
+                              final entered = enteredPinHolder[0];
+                              final roomPin = (entered != null && entered.length == 6) ? entered : pin;
                               webrtcProvider.joinRoom(roomPin);
                               Navigator.of(context).pop();
                             },
@@ -1716,7 +2104,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             backgroundColor: connectionColor('public room'),
                           ),
                           onPressed: () {
-                            final roomPin = enteredPinHolder[0] ?? pin;
+                            final entered = enteredPinHolder[0];
+                            final roomPin = (entered != null && entered.length == 6) ? entered : pin;
                             webrtcProvider.joinRoom(roomPin);
                             Navigator.of(context).pop();
                           },

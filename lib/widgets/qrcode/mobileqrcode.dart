@@ -14,13 +14,15 @@ Future<dynamic> buildMobileQrCodeDialog(
   String pin, {
   required WebRTCProvider webrtcProvider,
 }) async {
+  // Instantly join the room so the creator is already waiting.
+  webrtcProvider.joinRoom(pin);
+
   final isMobileDevice = defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS;
   return showDialog(
     barrierDismissible: isMobileDevice,
     context: context,
     builder: (context) {
-      final enteredPinHolder = <String?>[null];
       final isDarkMode =
           Provider.of<ThemeProvider>(context, listen: false).themeMode ==
           ThemeMode.dark;
@@ -81,84 +83,13 @@ Future<dynamic> buildMobileQrCodeDialog(
         contentPadding: EdgeInsets.all(isMobile ? 16.sp : 24),
         content: Consumer<WebRTCProvider>(
           builder: (context, webrtc, _) {
-            final activeRoomId = webrtc.roomId;
-            if (activeRoomId != null && activeRoomId.isNotEmpty) {
-              return SingleChildScrollView(
-                controller: scrollController,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Active room',
-                      style: TextStyle(
-                        color: tileColor,
-                        fontSize: isMobile ? 14 : 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    SizedBox(height: isMobile ? 12.sp : 16),
-                    SizedBox(
-                      width: isMobile ? 184 : 232,
-                      height: isMobile ? 184 : 232,
-                      child: Container(
-                        padding: EdgeInsets.all(isMobile ? 12.sp : 16),
-                        decoration: BoxDecoration(
-                          color: isDarkMode
-                              ? const Color(0xFF374151).withValues(alpha: 0.5)
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isDarkMode
-                                ? const Color(0xFF374151)
-                                : const Color(0xFFE5E7EB),
-                          ),
-                        ),
-                        child: QrImageView(
-                          data: activeRoomId,
-                          version: QrVersions.auto,
-                          size: isMobile ? 160.sp : 200,
-                          backgroundColor: Colors.white,
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: isMobile ? 12.sp : 16),
-                    Text(
-                      activeRoomId,
-                      style: TextStyle(
-                        color: tileColor,
-                        fontSize: isMobile ? 28 : 32,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: isMobile ? 3 : 4,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    SizedBox(height: isMobile ? 16 : 20),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          webrtc.leaveRoom();
-                          Navigator.of(context).pop();
-                        },
-                        icon: const Icon(Icons.logout, size: 18),
-                        label: const Text('Exit room'),
-                        style: ElevatedButton.styleFrom(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          backgroundColor: Colors.red,
-                          foregroundColor: AppColors.whiteColor,
-                          padding: EdgeInsets.symmetric(
-                            horizontal: isMobile ? 12.0 : 16.0,
-                            vertical: isMobile ? 12.0 : 14.0,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
+            // Auto-close when a peer connects via data channel (1:1 pairing complete).
+            if (webrtc.isDataChannelOpen) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                }
+              });
             }
             return SingleChildScrollView(
               controller: scrollController,
@@ -243,7 +174,10 @@ Future<dynamic> buildMobileQrCodeDialog(
                       ),
                       separatorBuilder: (index) => SizedBox(width: isMobile ? 8 : 15),
                       onCompleted: (value) {
-                        enteredPinHolder[0] = value;
+                        if (value.length == 4) {
+                          webrtcProvider.joinRoom(value);
+                          Navigator.of(context).pop();
+                        }
                       },
                       validator: (value) =>
                           (value == null || value.isEmpty) ? 'Please enter a valid pin' : null,
@@ -251,7 +185,7 @@ Future<dynamic> buildMobileQrCodeDialog(
                   ),
                   SizedBox(height: isMobile ? 16 : 20),
                   Text(
-                    'Enter pin from another device to pair',
+                    'Enter pin from another device to pair instantly',
                     style: TextStyle(
                       color: tileColor,
                       fontSize: isMobile ? 11 : 12,
@@ -269,71 +203,35 @@ Future<dynamic> buildMobileQrCodeDialog(
           vertical: isMobile ? 8.0 : 16.0,
         ),
         actions: [
-          Consumer<WebRTCProvider>(
-          builder: (context, webrtc, _) {
-            if (webrtc.roomId != null && webrtc.roomId!.isNotEmpty) {
-              return const SizedBox.shrink();
-            }
-            return Wrap(
-              alignment: WrapAlignment.center,
-              spacing: isMobile ? 8 : 10,
-              runSpacing: 8,
-              children: [
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    backgroundColor: connectionColor('paired device'),
-                    foregroundColor: isDarkMode ? Colors.black : Colors.white,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isMobile ? 12.0 : 16.0,
-                      vertical: isMobile ? 10.0 : 12.0,
-                    ),
+          SizedBox(
+            width: double.infinity,
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: isMobile ? 4.0 : 8.0),
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  onPressed: () {
-                    final roomPin = enteredPinHolder[0] ?? pin;
-                    webrtcProvider.joinRoom(roomPin);
-                    Navigator.of(context).pop();
-                  },
-                  child: Text(
-                    'Pair',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: isMobile ? 12 : 14,
-                    ),
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(
+                    vertical: isMobile ? 10.0 : 12.0,
                   ),
                 ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    backgroundColor: Colors.red,
-                    foregroundColor: AppColors.whiteColor,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isMobile ? 12.0 : 16.0,
-                      vertical: isMobile ? 10.0 : 12.0,
-                    ),
-                  ),
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: Text(
-                    'Close',
-                    style: TextStyle(
-                      color: AppColors.whiteColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: isMobile ? 12 : 14,
-                    ),
-                    textAlign: TextAlign.center,
+                onPressed: () {
+                  webrtcProvider.leaveRoom();
+                  Navigator.of(context).pop();
+                },
+                child: Text(
+                  'Close',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: isMobile ? 12 : 14,
                   ),
                 ),
-              ],
-            );
-          },
-        ),
+              ),
+            ),
+          ),
         ],
       );
     },
