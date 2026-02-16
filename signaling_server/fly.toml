@@ -1,0 +1,27 @@
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+
+app = 'zappshare-signaling'
+primary_region = 'jnb'
+
+[build]
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Keep at least 1 machine running so WebSocket connections aren't dropped.
+  auto_stop_machines = 'suspend'
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = 'connections'
+    hard_limit = 250
+    soft_limit = 200
+
+# Increase proxy timeout for long-lived WebSocket connections (default is 60s).
+[http_service.http_options]
+  idle_timeout = 300
+
+[[vm]]
+  memory = '256mb'
+  cpus = 1
