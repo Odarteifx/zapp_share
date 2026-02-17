@@ -19,7 +19,8 @@ Future<dynamic> buildMobileQrCodeDialog(
 
   final isMobileDevice = defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS;
-  return showDialog(
+  final pinController = TextEditingController();
+  final result = showDialog(
     barrierDismissible: isMobileDevice,
     context: context,
     builder: (context) {
@@ -158,6 +159,7 @@ Future<dynamic> buildMobileQrCodeDialog(
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: isMobile ? 8.0 : 0),
                     child: Pinput(
+                      controller: pinController,
                       length: 4,
                       defaultPinTheme: PinTheme(
                         width: isMobile ? 45 : 60,
@@ -203,11 +205,40 @@ Future<dynamic> buildMobileQrCodeDialog(
           vertical: isMobile ? 8.0 : 16.0,
         ),
         actions: [
-          SizedBox(
-            width: double.infinity,
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: isMobile ? 4.0 : 8.0),
-              child: ElevatedButton(
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: isMobile ? 8 : 10,
+            runSpacing: 8,
+            children: [
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  backgroundColor: connectionColor('paired device'),
+                  foregroundColor: isDarkMode ? Colors.black : Colors.white,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 12.0 : 16.0,
+                    vertical: isMobile ? 10.0 : 12.0,
+                  ),
+                ),
+                onPressed: () {
+                  final entered = pinController.text.replaceAll(' ', '');
+                  if (entered.length == 4) {
+                    webrtcProvider.joinRoom(entered);
+                    Navigator.of(context).pop();
+                  }
+                },
+                child: Text(
+                  'Join',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: isMobile ? 12 : 14,
+                  ),
+                ),
+              ),
+              ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -215,6 +246,7 @@ Future<dynamic> buildMobileQrCodeDialog(
                   backgroundColor: Colors.red,
                   foregroundColor: Colors.white,
                   padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 12.0 : 16.0,
                     vertical: isMobile ? 10.0 : 12.0,
                   ),
                 ),
@@ -230,12 +262,14 @@ Future<dynamic> buildMobileQrCodeDialog(
                   ),
                 ),
               ),
-            ),
+            ],
           ),
         ],
       );
     },
   );
+  result.then((_) => pinController.dispose());
+  return result;
 }
 
 Future<dynamic> buildMobilePublicRoomQrCodeDialog(
@@ -245,11 +279,11 @@ Future<dynamic> buildMobilePublicRoomQrCodeDialog(
 }) async {
   final isMobileDevice = defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS;
-  return showDialog(
+  final pinController = TextEditingController();
+  final result = showDialog(
     barrierDismissible: isMobileDevice,
     context: context,
     builder: (context) {
-      final enteredPinHolder = <String?>[null];
       final isDarkMode =
           Provider.of<ThemeProvider>(context, listen: false).themeMode ==
           ThemeMode.dark;
@@ -458,6 +492,7 @@ Future<dynamic> buildMobilePublicRoomQrCodeDialog(
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: isMobile ? 8.0 : 0),
                     child: Pinput(
+                      controller: pinController,
                       length: 6,
                       defaultPinTheme: PinTheme(
                         decoration: BoxDecoration(
@@ -477,9 +512,6 @@ Future<dynamic> buildMobilePublicRoomQrCodeDialog(
                             ? (isMobile ? 10 : 20)
                             : (isMobile ? 3 : 5),
                       ),
-                      onCompleted: (value) {
-                        enteredPinHolder[0] = value;
-                      },
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter a valid pin';
@@ -531,7 +563,8 @@ Future<dynamic> buildMobilePublicRoomQrCodeDialog(
                   ),
                 ),
                 onPressed: () {
-                  final roomPin = enteredPinHolder[0] ?? pin;
+                  final entered = pinController.text.replaceAll(' ', '');
+                  final roomPin = (entered.length == 6) ? entered : pin;
                   webrtcProvider.joinRoom(roomPin);
                   Navigator.of(context).pop();
                 },
@@ -577,6 +610,8 @@ Future<dynamic> buildMobilePublicRoomQrCodeDialog(
       );
     },
   );
+  result.then((_) => pinController.dispose());
+  return result;
 }
 
 Color connectionColor(String connectionType) {
